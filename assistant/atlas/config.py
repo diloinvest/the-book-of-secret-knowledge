@@ -78,7 +78,7 @@ DEFAULT_READONLY_TOOLS: list[str] = [
 ]
 DEFAULT_READONLY_TOOL_PATTERNS: list[str] = [
     r"mcp__.*__(get|list|search|read|fetch|query|show|find|describe|check)",
-    r"mcp__atlas__(recall|secret_list|system_info)",
+    r"mcp__atlas__(recall|browse|browser|secret_list|system_info)",
 ]
 
 
@@ -128,6 +128,7 @@ class Config:
     persona: str = ""
     memory_context_items: int = 25
     audit_log: bool = True
+    browser_headless: bool = True        # set false to watch the browser work
 
     # --- autonomy -------------------------------------------------------
     tasks: list[Task] = field(default_factory=list)
@@ -166,7 +167,7 @@ def load_config(path: Path | None = None) -> Config:
         "model", "fallback_model", "effort", "max_turns", "max_budget_usd",
         "workdir", "additional_directories", "setting_sources", "disallowed_tools",
         "skills", "permission_mode", "gate", "persona", "memory_context_items",
-        "audit_log",
+        "audit_log", "browser_headless",
     ):
         if key in raw:
             setattr(cfg, key, raw[key])

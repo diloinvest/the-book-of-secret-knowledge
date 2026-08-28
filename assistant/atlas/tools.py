@@ -22,6 +22,7 @@ from typing import Any
 import httpx
 from claude_agent_sdk import create_sdk_mcp_server, tool
 
+from .browser import Browser
 from .config import Config
 from .memory import Memory
 
@@ -50,6 +51,8 @@ def _expand_secrets(value: Any, secrets: dict[str, str]) -> Any:
 
 def make_tools(cfg: Config, memory: Memory, secrets: dict[str, str]) -> list:
     """Build Atlas' tool set. Returned as a list so it can be tested directly."""
+
+    browser = Browser(cfg.home / "browser", headless=cfg.browser_headless)
 
     # --- memory ---------------------------------------------------------
     @tool(
@@ -172,6 +175,120 @@ def make_tools(cfg: Config, memory: Memory, secrets: dict[str, str]) -> list:
         memory.log("secret", "secret_get", {"name": name}, decision="revealed")
         return _text(secrets[name])
 
+    # --- full browser ---------------------------------------------------
+    @tool(
+        "browse",
+        "Open a URL in a real Chromium browser and return the fully rendered "
+        "page text. Use this for anything plain HTTP can't read: JavaScript-heavy "
+        "sites, single-page apps, and pages behind a login you have already signed "
+        "into. The browser keeps its cookies and sessions between runs, so once you "
+        "log in to a site it stays logged in.",
+        {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "wait": {
+                    "type": "string",
+                    "enum": ["load", "domcontentloaded", "networkidle", "commit"],
+                    "default": "load",
+                },
+                "max_chars": {"type": "integer", "default": 20000},
+            },
+            "required": ["url"],
+        },
+    )
+    async def browse(args: dict[str, Any]) -> dict[str, Any]:
+        try:
+            meta = await browser.goto(
+                _expand_secrets(args["url"], secrets), wait=args.get("wait", "load")
+            )
+            text = await browser.text(int(args.get("max_chars", 20000)))
+        except Exception as exc:
+            return _text(f"{type(exc).__name__}: {exc}", is_error=True)
+        return _text(f"{meta['status']} {meta['title']}\n{meta['url']}\n\n{text}")
+
+    @tool(
+        "browser",
+        "Interact with the page currently open in the browser: click, fill in a "
+        "field, press a key, run JavaScript, screenshot, or read the URL/HTML. "
+        "Selectors are CSS or Playwright text= selectors. Use this to work through "
+        "logins, forms, search boxes and multi-step flows.",
+        {
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": ["click", "fill", "press", "eval", "screenshot", "html", "url", "text"],
+                },
+                "selector": {"type": "string"},
+                "value": {"type": "string", "description": "text for fill, key for press"},
+                "script": {"type": "string", "description": "JavaScript for eval"},
+                "path": {"type": "string", "description": "output path for screenshot"},
+            },
+            "required": ["action"],
+        },
+    )
+    async def browser_act(args: dict[str, Any]) -> dict[str, Any]:
+        action = args["action"]
+        try:
+            if action == "click":
+                return _text(await browser.click(args["selector"]))
+            if action == "fill":
+                return _text(await browser.fill(args["selector"], _expand_secrets(args.get("value", ""), secrets)))
+            if action == "press":
+                return _text(await browser.press(args["selector"], args.get("value", "Enter")))
+            if action == "eval":
+                return _text(json.dumps(await browser.eval_js(args["script"]), ensure_ascii=False, default=str)[:8000])
+            if action == "screenshot":
+                path = args.get("path") or str(cfg.home / "screenshot.png")
+                return _text(f"saved {await browser.screenshot(path)}")
+            if action == "html":
+                return _text(await browser.html())
+            if action == "url":
+                return _text(await browser.current_url())
+            if action == "text":
+                return _text(await browser.text())
+            return _text(f"unknown action {action}", is_error=True)
+        except Exception as exc:
+            return _text(f"{type(exc).__name__}: {exc}", is_error=True)
+
+    @tool(
+        "download",
+        "Download any URL straight to a file on disk -- binaries, archives, media, "
+        "anything, not just text. Streams so large files are fine. Supports "
+        "{{secret:NAME}} in the URL and headers.",
+        {
+            "type": "object",
+            "properties": {
+                "url": {"type": "string"},
+                "path": {"type": "string", "description": "destination file path"},
+                "headers": {"type": "object", "additionalProperties": {"type": "string"}},
+                "timeout": {"type": "number", "default": 300},
+            },
+            "required": ["url", "path"],
+        },
+    )
+    async def download(args: dict[str, Any]) -> dict[str, Any]:
+        url = _expand_secrets(args["url"], secrets)
+        headers = _expand_secrets(args.get("headers") or {}, secrets)
+        dest = Path(args["path"]).expanduser()
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        total = 0
+        try:
+            async with httpx.AsyncClient(
+                timeout=float(args.get("timeout", 300)), follow_redirects=True
+            ) as client:
+                async with client.stream("GET", url, headers=headers) as resp:
+                    if resp.status_code >= 400:
+                        return _text(f"HTTP {resp.status_code} for {url}", is_error=True)
+                    with dest.open("wb") as fh:
+                        async for chunk in resp.aiter_bytes(65536):
+                            fh.write(chunk)
+                            total += len(chunk)
+        except Exception as exc:
+            return _text(f"{type(exc).__name__}: {exc}", is_error=True)
+        return _text(f"downloaded {total} bytes to {dest}")
+
     # --- compute --------------------------------------------------------
     @tool(
         "python",
@@ -268,15 +385,20 @@ def make_tools(cfg: Config, memory: Memory, secrets: dict[str, str]) -> list:
             pass
         return _text(json.dumps(info, ensure_ascii=False, indent=2))
 
+    make_tools.last_browser = browser  # for optional cleanup by callers
     return [
         remember, recall, forget,
-        http, secret_list, secret_get,
+        http, download, browse, browser_act,
+        secret_list, secret_get,
         python_exec, notify, system_info,
     ]
 
 
 def build_server(cfg: Config, memory: Memory, secrets: dict[str, str]):
-    """Create the in-process MCP server exposing Atlas' own tools."""
-    return create_sdk_mcp_server(
-        name="atlas", version="0.1.0", tools=make_tools(cfg, memory, secrets)
-    )
+    """Create the in-process MCP server exposing Atlas' own tools.
+
+    The shared Browser instance is attached to the returned server object as
+    ``.browser`` so the caller can close it when the session ends.
+    """
+    tools = make_tools(cfg, memory, secrets)
+    return create_sdk_mcp_server(name="atlas", version="0.1.0", tools=tools)

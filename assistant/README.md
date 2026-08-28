@@ -18,10 +18,18 @@ asks, down to nothing at all.
 
 - **Shell & files** — the built-in Claude Code tools: read, write, edit, run
   commands, search, anywhere on disk.
-- **`http`** — an arbitrary HTTP client for any URL, method, header and body.
-  Reaches private hosts, token-gated APIs and non-HTML endpoints that `WebFetch`
-  can't. Authenticate with `{{secret:NAME}}` placeholders so credentials never
-  enter the conversation.
+- **The whole internet.** No allow-list, no blocked domains:
+  - **`http`** — arbitrary requests to any URL, method, header and body. Reaches
+    private hosts, token-gated APIs and non-HTML endpoints. Authenticate with
+    `{{secret:NAME}}` placeholders so credentials never enter the conversation.
+  - **`browse` + `browser`** — a real Chromium browser (Playwright). Reads
+    JavaScript-heavy sites and single-page apps, and works through logins, forms
+    and multi-step flows: click, fill, press, run JS, screenshot. The browser
+    keeps a persistent profile on disk, so once you sign in to a site Atlas stays
+    signed in across runs.
+  - **`download`** — save any URL straight to disk (binaries, archives, media),
+    streamed.
+  - Plus the SDK's `WebSearch` and `WebFetch`.
 - **`python`** — run Python in a subprocess for quick computation and scripting.
 - **`remember` / `recall` / `forget`** — durable memory in a local SQLite file,
   loaded into context at the start of every session.
@@ -40,6 +48,14 @@ cd assistant
 pip install -e .
 atlas init          # creates ~/.atlas/{config.toml, secrets.toml, memory.db}
 ```
+
+For the browser tools, install the Chromium binary once:
+
+```bash
+playwright install chromium
+```
+
+(If your environment already ships a Chromium, point `ATLAS_CHROME` at it.)
 
 Authentication follows the Agent SDK: set `ANTHROPIC_API_KEY`, or use whatever
 credential your environment already provides.
@@ -121,6 +137,7 @@ atlas/
   config.py    configuration + secrets loading
   memory.py    SQLite: durable facts + audit log
   tools.py     Atlas' own in-process tools (http, python, memory, ...)
+  browser.py   persistent Chromium via Playwright
   gate.py      the approval gate (PreToolUse hook + can_use_tool callback)
   session.py   assembles ClaudeAgentOptions
   cli.py       REPL, one-shot, scheduler

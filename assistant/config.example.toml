@@ -28,6 +28,7 @@ Be direct. Skip the preamble.
 
 memory_context_items = 25       # facts loaded into context at session start
 audit_log = true                # record every tool call in memory.db
+browser_headless = true         # set false to watch the Chromium browser work
 
 # --- services -------------------------------------------------------------
 # Any MCP server. stdio servers take command/args/env; remote ones take

@@ -48,7 +48,12 @@ def build_options(
     import getpass
 
     secrets = load_secrets(cfg)
+    from .tools import make_tools
+
     atlas_server = build_server(cfg, memory, secrets)
+    # make_tools stashes the shared Browser it created; hand it to the gate so
+    # the runtime can close it on shutdown.
+    gate.browser = getattr(make_tools, "last_browser", None)
 
     mcp_servers: dict[str, Any] = {"atlas": atlas_server}
     mcp_servers.update(cfg.mcp_servers)

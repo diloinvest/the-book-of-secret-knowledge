@@ -138,6 +138,16 @@ class Atlas:
                 result = message
         return result
 
+    async def aclose(self) -> None:
+        """Close from inside the event loop (shuts the browser down cleanly)."""
+        browser = getattr(self.gate, "browser", None)
+        if browser is not None and getattr(browser, "started", False):
+            try:
+                await browser.close()
+            except Exception:
+                pass
+        self.memory.close()
+
     def close(self) -> None:
         self.memory.close()
 
@@ -199,7 +209,7 @@ async def cmd_chat(cfg: Config, args) -> int:
                     await client.interrupt()
                     console.print("[yellow]interrupted[/]")
     finally:
-        atlas.close()
+        await atlas.aclose()
     console.print("[dim]bye[/]")
     return 0
 
@@ -281,7 +291,7 @@ async def cmd_ask(cfg: Config, args) -> int:
         if not args.quiet:
             _print_result_footer(result)
     finally:
-        atlas.close()
+        await atlas.aclose()
     return 0
 
 
@@ -308,7 +318,7 @@ async def run_task(cfg: Config, task: Task) -> None:
         console.print(f"[red]task {task.name} failed:[/] {exc}")
         atlas.memory.log("task", task.name, str(exc), decision="failed")
     finally:
-        atlas.close()
+        await atlas.aclose()
 
 
 async def cmd_daemon(cfg: Config, args) -> int:
