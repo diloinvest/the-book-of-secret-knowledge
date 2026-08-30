@@ -1,0 +1,69 @@
+# Atlas configuration. Copy to ~/.atlas/config.toml (or run `atlas init`).
+# Every field here is optional; the defaults are what you get without a file.
+
+model = "claude-opus-5"
+# effort = "xhigh"              # low | medium | high | xhigh | max
+workdir = "~/"                  # where sessions start
+additional_directories = []     # extra roots to hand the agent up front
+
+# open   = never asks
+# danger = asks before destructive or outward-facing calls  (default)
+# strict = asks before anything that is not read-only
+gate = "danger"
+
+# Anything you never want it to reach. Empty means nothing is off limits.
+# disallowed_tools = ["Bash(rm -rf /*)"]
+
+# Extra things that should trigger a confirmation, on top of the built-in list.
+# extra_danger_patterns = ["\\bprod\\b", "stripe\\.com"]
+
+# Replace the built-in danger list entirely instead of extending it:
+# danger_patterns = ["\\brm\\s+-rf\\b"]
+
+# Voice and standing instructions, appended to the system prompt.
+persona = """
+Answer in Bulgarian unless I write in another language.
+Be direct. Skip the preamble.
+"""
+
+memory_context_items = 25       # facts loaded into context at session start
+audit_log = true                # record every tool call in memory.db
+browser_headless = true         # set false to watch the Chromium browser work
+
+# --- services -------------------------------------------------------------
+# Any MCP server. stdio servers take command/args/env; remote ones take
+# type + url + headers. ${VAR} is not expanded here -- put tokens in
+# ~/.atlas/secrets.toml and reference them from the http tool, or set them in
+# your shell environment and pass them through env.
+
+# [mcp_servers.github]
+# type = "http"
+# url = "https://api.githubcopilot.com/mcp/"
+# headers = { Authorization = "Bearer ghp_your_token" }
+
+# [mcp_servers.filesystem]
+# command = "npx"
+# args = ["-y", "@modelcontextprotocol/server-filesystem", "/home/me"]
+
+# [mcp_servers.postgres]
+# command = "npx"
+# args = ["-y", "@bytebase/dbhub", "--dsn", "postgresql://localhost/mydb"]
+
+# --- unattended work ------------------------------------------------------
+# `atlas daemon` runs these on their intervals; `atlas run NAME` runs one now.
+# Nobody is at the terminal during a task, so a gate that would ask blocks the
+# call -- give tasks gate = "open" if they need to act on their own.
+
+# [tasks.inbox]
+# every = "30m"
+# gate = "open"
+# prompt = """
+# Check my inbox for anything that needs an answer today.
+# If there is nothing new since your last run, do nothing and say so.
+# Otherwise notify me with a one-line summary.
+# """
+
+# [tasks.disk]
+# every = "6h"
+# gate = "open"
+# prompt = "If any filesystem is over 85% full, notify me with the top offenders."

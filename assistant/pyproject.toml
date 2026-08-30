@@ -1,0 +1,22 @@
+[project]
+name = "atlas-assistant"
+version = "0.1.0"
+description = "Personal AI assistant with unrestricted tool access, built on the Claude Agent SDK"
+requires-python = ">=3.10"
+dependencies = [
+    "claude-agent-sdk>=0.1.0",
+    "rich>=13.7",
+    "httpx>=0.27",
+    "tomli>=2.0; python_version < '3.11'",
+    "playwright>=1.40",
+]
+
+[project.scripts]
+atlas = "atlas.cli:main"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["atlas"]
